@@ -51,7 +51,11 @@ appSettings.forEach(x => {
   // Unsure if these nested quotes will cause a problem
   // If it does, we may need to not allow spaces in appSetting keys
   // or figure something else out.
-  exec(`azure site appsetting add "${x.name}="\"${x.value}\""" "${args.destApp}" --subscription "${args.destSubscription}"`);
+  if(!args.slot) {
+      exec(`azure site appsetting add "${x.name}="\"${x.value}\""" "${args.destApp}" --subscription "${args.destSubscription}"`);
+  } else {
+      exec(`azure site appsetting add "${x.name}="\"${x.value}\""" "${args.destApp}" --subscription "${args.destSubscription}" --slot "${args.slot}"`);
+  }
 });
 
 console.log('--------------------------------------------------');
@@ -69,7 +73,11 @@ connectionStrings.forEach(x => {
 
   // Hopefully just setting "Custom" here is OK.
   // The integers returned by `list` don't seem to match the expectations of `add`.
-  exec(`azure site connectionstring add "${x.name}" "${x.connectionString}" "Custom" "${args.destApp}" --subscription "${args.destSubscription}"`);
+  if(!args.slot) {
+      exec(`azure site connectionstring add "${x.name}" "${x.connectionString}" "Custom" "${args.destApp}" --subscription "${args.destSubscription}"`);
+  } else {
+      exec(`azure site connectionstring add "${x.name}" "${x.connectionString}" "Custom" "${args.destApp}" --subscription "${args.destSubscription}" --slot "${args.slot}"`);
+  }
 });
 
 console.log('--------------------------------------------------');
