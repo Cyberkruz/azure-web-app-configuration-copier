@@ -8,6 +8,8 @@ if (!which('azure')) {
   exit(1);
 }
 
+console.log(args);
+
 if (!args.sourceApp) {
   console.log('Please provide a sourceApp parameter with the name of the Azure Web App.');
   exit(1);
@@ -18,45 +20,56 @@ if (!args.destApp) {
   exit(1);
 }
 
-// Use specified subscription, if specified.
-// Otherwise, use current subscription.
-var subscription = args.subscription || JSON.parse(exec(`azure account show --json`).output)[0].name;
+if(!args.subscription) {
+    if (!args.sourceSubscription) {
+      console.log('Please provide a sourceSubscription parameter.');
+      exit(1);
+    }
+
+    if (!args.destSubscription) {
+      console.log('Please provide a destSubscription parameter.');
+      exit(1);
+    }
+} else {
+    args.sourceSubscription = args.subscription;
+    args.destSubscription = args.subscription;
+}
 
 console.log('--------------------------------------------------');
 console.log('Begin copying appSettings');
 console.log('--------------------------------------------------');
 
-var appSettings = JSON.parse(exec(`azure site appsetting list "${args.sourceApp}" --subscription "${subscription}" --json`).output);
+var appSettings = JSON.parse(exec(`azure site appsetting list "${args.sourceApp}" --subscription "${args.sourceSubscription}" --json`).output);
 
 appSettings.forEach(x => {
   console.log(`Processing: "${x.name}"`);
 
   // Do we **need** to delete before adding?
   // Unsure if it will simply create a duplicate or replace.
-  exec(`azure site appsetting delete "${x.name}" "${args.destApp}" --quiet --subscription "${subscription}"`);
+  exec(`azure site appsetting delete "${x.name}" "${args.destApp}" --quiet --subscription "${args.destSubscription}"`);
 
   // Unsure if these nested quotes will cause a problem
   // If it does, we may need to not allow spaces in appSetting keys
   // or figure something else out.
-  exec(`azure site appsetting add "${x.name}="\"${x.value}\""" "${args.destApp}" --subscription "${subscription}"`);
+  exec(`azure site appsetting add "${x.name}="\"${x.value}\""" "${args.destApp}" --subscription "${args.destSubscription}"`);
 });
 
 console.log('--------------------------------------------------');
 console.log('Begin copying connectionStrings');
 console.log('--------------------------------------------------');
 
-var connectionStrings = JSON.parse(exec(`azure site connectionstring list "${args.sourceApp}" --subscription "${subscription}" --json`).output);
+var connectionStrings = JSON.parse(exec(`azure site connectionstring list "${args.sourceApp}" --subscription "${args.sourceSubscription}" --json`).output);
 
 connectionStrings.forEach(x => {
   console.log(`Processing: "${x.name}"`);
 
   // Do we **need** to delete before adding?
   // Unsure if it will simply create a duplicate or replace.
-  exec(`azure site connectionstring delete "${x.name}" "${args.destApp}" --quiet --subscription "${subscription}"`);
+  exec(`azure site connectionstring delete "${x.name}" "${args.destApp}" --quiet --subscription "${args.destSubscription}"`);
 
   // Hopefully just setting "Custom" here is OK.
   // The integers returned by `list` don't seem to match the expectations of `add`.
-  exec(`azure site connectionstring add "${x.name}" "${x.connectionString}" "Custom" "${args.destApp}" --subscription "${subscription}"`);
+  exec(`azure site connectionstring add "${x.name}" "${x.connectionString}" "Custom" "${args.destApp}" --subscription "${args.destSubscription}"`);
 });
 
 console.log('--------------------------------------------------');
