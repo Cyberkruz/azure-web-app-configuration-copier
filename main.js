@@ -36,10 +36,23 @@ if(!args.subscription) {
 }
 
 console.log('--------------------------------------------------');
+console.log('Change to Source Subscription');
+console.log('--------------------------------------------------');
+
+exec(`azure account set "${args.sourceSubscription}"`);
+
+console.log('--------------------------------------------------');
 console.log('Begin copying appSettings');
 console.log('--------------------------------------------------');
 
+
 var appSettings = JSON.parse(exec(`azure site appsetting list "${args.sourceApp}" --subscription "${args.sourceSubscription}" --json`).output);
+
+console.log('--------------------------------------------------');
+console.log('Change to Dest Subscription');
+console.log('--------------------------------------------------');
+
+exec(`azure account set "${args.destSubscription}"`);
 
 appSettings.forEach(x => {
   console.log(`Processing: "${x.name}"`);
@@ -59,10 +72,22 @@ appSettings.forEach(x => {
 });
 
 console.log('--------------------------------------------------');
+console.log('Change to Source Subscription');
+console.log('--------------------------------------------------');
+
+exec(`azure account set "${args.sourceSubscription}"`);
+
+console.log('--------------------------------------------------');
 console.log('Begin copying connectionStrings');
 console.log('--------------------------------------------------');
 
 var connectionStrings = JSON.parse(exec(`azure site connectionstring list "${args.sourceApp}" --subscription "${args.sourceSubscription}" --json`).output);
+
+console.log('--------------------------------------------------');
+console.log('Change to Dest Subscription');
+console.log('--------------------------------------------------');
+
+exec(`azure account set "${args.destSubscription}"`);
 
 connectionStrings.forEach(x => {
   console.log(`Processing: "${x.name}"`);
