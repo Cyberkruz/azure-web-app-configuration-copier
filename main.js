@@ -1,14 +1,10 @@
 require('shelljs/global');
 var args = require('minimist')(process.argv.slice(2));
 
-// Note: The slot setting is not handled.
-
 if (!which('azure')) {
   console.log('This script requires the Microsoft Azure Xplat-CLI.');
   exit(1);
 }
-
-console.log(args);
 
 if (!args.sourceApp) {
   console.log('Please provide a sourceApp parameter with the name of the Azure Web App.');
@@ -20,12 +16,15 @@ if (!args.destApp) {
   exit(1);
 }
 
+if(!args.subscription && !args.sourceSubscription && !args.destSubscription) {
+  args.subscription = JSON.parse(exec(`azure account show --json`).output)[0].name;
+}
+
 if(!args.subscription) {
     if (!args.sourceSubscription) {
       console.log('Please provide a sourceSubscription parameter.');
       exit(1);
     }
-
     if (!args.destSubscription) {
       console.log('Please provide a destSubscription parameter.');
       exit(1);
@@ -35,76 +34,114 @@ if(!args.subscription) {
     args.destSubscription = args.subscription;
 }
 
-console.log('--------------------------------------------------');
-console.log('Change to Source Subscription');
-console.log('--------------------------------------------------');
-
-exec(`azure account set "${args.sourceSubscription}"`);
 
 console.log('--------------------------------------------------');
 console.log('Begin copying appSettings');
 console.log('--------------------------------------------------');
 
+var sourceSettings = execJsonCommand(args.sourceSlot, 
+  `azure site appsetting list "${args.sourceApp}" --subscription "${args.sourceSubscription}"`);
+var destSettings = execJsonCommand(args.destSlot,
+  `azure site appsetting list "${args.destApp}" --subscription "${args.destSubscription}"`);
 
-var appSettings = JSON.parse(exec(`azure site appsetting list "${args.sourceApp}" --subscription "${args.sourceSubscription}" --json`).output);
 
 console.log('--------------------------------------------------');
-console.log('Change to Dest Subscription');
+console.log('Begin processing appSettings');
 console.log('--------------------------------------------------');
 
-exec(`azure account set "${args.destSubscription}"`);
+for(var x = 0; x < sourceSettings.length; ++x) {
+  var src = sourceSettings[x];
 
-appSettings.forEach(x => {
-  console.log(`Processing: "${x.name}"`);
-
-  // Do we **need** to delete before adding?
-  // Unsure if it will simply create a duplicate or replace.
-  exec(`azure site appsetting delete "${x.name}" "${args.destApp}" --quiet --subscription "${args.destSubscription}"`);
-
-  // Unsure if these nested quotes will cause a problem
-  // If it does, we may need to not allow spaces in appSetting keys
-  // or figure something else out.
-  if(!args.slot) {
-      exec(`azure site appsetting add "${x.name}="\"${x.value}\""" "${args.destApp}" --subscription "${args.destSubscription}"`);
-  } else {
-      exec(`azure site appsetting add "${x.name}="\"${x.value}\""" "${args.destApp}" --subscription "${args.destSubscription}" --slot "${args.slot}"`);
+  if(args.ignore && args.ignore === src.name) {
+    console.log(`Skipping: "${src.name}"`);
+    continue;
   }
-});
 
-console.log('--------------------------------------------------');
-console.log('Change to Source Subscription');
-console.log('--------------------------------------------------');
+  console.log(`Processing: "${src.name}"`);
 
-exec(`azure account set "${args.sourceSubscription}"`);
+  if(findByName(destSettings, src.name)) {
+    console.log(`Found existing "${src.name}" in destination. Deleting.`);
+    execCommand(args.destSlot, 
+      `azure site appsetting delete "${src.name}" "${args.destApp}" --quiet --subscription "${args.destSubscription}"`);
+  }
+
+  console.log(`Adding: "${src.name}" to destination.`)
+
+  execCommand(args.destSlot,
+    `azure site appsetting add "${src.name}="\"${src.value}\""" "${args.destApp}" --subscription "${args.destSubscription}"`);
+}
 
 console.log('--------------------------------------------------');
 console.log('Begin copying connectionStrings');
 console.log('--------------------------------------------------');
 
-var connectionStrings = JSON.parse(exec(`azure site connectionstring list "${args.sourceApp}" --subscription "${args.sourceSubscription}" --json`).output);
+var sourceConnections = execJsonCommand(args.sourceSlot, 
+  `azure site connectionstring list "${args.sourceApp}" --subscription "${args.sourceSubscription}"`);
+var destConnections = execJsonCommand(args.destSlot,
+  `azure site connectionstring list "${args.destApp}" --subscription "${args.destSubscription}"`);
+
 
 console.log('--------------------------------------------------');
-console.log('Change to Dest Subscription');
+console.log('Begin processing connectionStrings');
 console.log('--------------------------------------------------');
 
-exec(`azure account set "${args.destSubscription}"`);
+for(var x = 0; x < sourceConnections.length; ++x) {
+  var src = sourceConnections[x];
 
-connectionStrings.forEach(x => {
-  console.log(`Processing: "${x.name}"`);
-
-  // Do we **need** to delete before adding?
-  // Unsure if it will simply create a duplicate or replace.
-  exec(`azure site connectionstring delete "${x.name}" "${args.destApp}" --quiet --subscription "${args.destSubscription}"`);
-
-  // Hopefully just setting "Custom" here is OK.
-  // The integers returned by `list` don't seem to match the expectations of `add`.
-  if(!args.slot) {
-      exec(`azure site connectionstring add "${x.name}" "${x.connectionString}" "Custom" "${args.destApp}" --subscription "${args.destSubscription}"`);
-  } else {
-      exec(`azure site connectionstring add "${x.name}" "${x.connectionString}" "Custom" "${args.destApp}" --subscription "${args.destSubscription}" --slot "${args.slot}"`);
+  if(args.ignore && args.ignore === src.name) {
+    console.log(`Skipping: "${src.name}"`);
+    continue;
   }
-});
+
+  console.log(`Processing: "${src.name}"`);
+
+  if(findByName(destConnections, src.name)) {
+    console.log(`Found existing "${src.name}" in destination. Deleting.`);
+    execCommand(args.destSlot, 
+      `azure site connectionstring delete "${src.name}" "${args.destApp}" --quiet --subscription "${args.destSubscription}"`);
+  }
+
+  console.log(`Adding: "${src.name}" to destination.`);
+  var type = parseDbType(src.type);
+  console.log("The string is: " + `${type}`);
+
+  execCommand(args.destSlot,
+    `azure site connectionstring add "${src.name}" "${src.connectionString}" "${type}" "${args.destApp}" --subscription "${args.destSubscription}"`);
+}
+
 
 console.log('--------------------------------------------------');
 console.log();
 console.log(`appSettings and connectionStrings have been synced from ${args.sourceApp} to ${args.destApp}.`);
+
+
+function findByName(collection, name) {
+  for(var x = 0; x < collection.length; ++x) {
+    if(collection[x].name && collection[x].name === name) {
+      return true;
+    }    
+  }
+  return false;
+}
+
+function execJsonCommand(slot, command) {
+  if(slot) {
+    command += ` --slot "${args.sourceSlot}"`;
+  }
+  command += ` --json`;
+  return JSON.parse(exec(command).output);
+}
+
+function execCommand(slot, command) {
+  if(slot) {
+    command += ` --slot "${args.sourceSlot}"`;
+  }
+  exec(command);
+}
+
+function parseDbType(db) {
+  switch(db) {
+    default:
+      return "Custom";
+  }
+}
