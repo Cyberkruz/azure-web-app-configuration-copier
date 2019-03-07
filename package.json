@@ -9,6 +9,7 @@
   "author": "Ritter Insurance Marketing",
   "license": "MIT",
   "dependencies": {
+    "lodash": "^4.17.4",
     "minimist": "^1.2.0",
     "shelljs": "^0.5.3"
   }
